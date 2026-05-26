@@ -1,0 +1,40 @@
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: notifications-function-rabbitmq-auth
+  namespace: gamestore
+spec:
+  secretTargetRef:
+    - parameter: host
+      name: notifications-function-secret
+      key: rabbitmq-connection
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: notifications-function-scaler
+  namespace: gamestore
+spec:
+  scaleTargetRef:
+    name: notifications-function
+  pollingInterval: 15
+  cooldownPeriod: 300
+  minReplicaCount: 0
+  maxReplicaCount: 5
+  triggers:
+    - type: rabbitmq
+      metadata:
+        protocol: amqp
+        queueName: UserCreated-notifications
+        mode: QueueLength
+        value: "5"
+      authenticationRef:
+        name: notifications-function-rabbitmq-auth
+    - type: rabbitmq
+      metadata:
+        protocol: amqp
+        queueName: OrderProcessed-notifications
+        mode: QueueLength
+        value: "5"
+      authenticationRef:
+        name: notifications-function-rabbitmq-auth

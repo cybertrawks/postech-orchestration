@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: catalog-api
+  namespace: gamestore
+  labels:
+    app: catalog-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: catalog-api
+  template:
+    metadata:
+      labels:
+        app: catalog-api
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "8080"
+    spec:
+      imagePullSecrets:
+        - name: registry-pull-secret
+      containers:
+        - name: catalog-api
+          image: gitlab.fcg.local:5050/postech/postech-catalog-api:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: catalog-api-config
+          env:
+            - name: ConnectionStrings__DefaultConnection
+              valueFrom:
+                secretKeyRef:
+                  name: catalog-api-secret
+                  key: ConnectionStrings__DefaultConnection
+            - name: JwtSettings__SecretKey
+              valueFrom:
+                secretKeyRef:
+                  name: catalog-api-secret
+                  key: JwtSettings__SecretKey
+            - name: RabbitMQ__Password
+              valueFrom:
+                secretKeyRef:
+                  name: catalog-api-secret
+                  key: RabbitMQ__Password
+            - name: ConnectionStrings__MongoDb
+              valueFrom:
+                secretKeyRef:
+                  name: catalog-api-secret
+                  key: ConnectionStrings__MongoDb
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            periodSeconds: 10
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            periodSeconds: 20
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi

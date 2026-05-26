@@ -1,0 +1,58 @@
+_format_version: "3.0"
+_transform: true
+
+# Consumer com credencial JWT (iss = Postech.API, mesmo valor do users-api)
+consumers:
+  - username: postech-app
+    jwt_secrets:
+      - key: Postech.API
+        secret: CHANGE_ME
+        algorithm: HS256
+
+services:
+  # ── Users API ──────────────────────────────────────────
+  - name: users-api
+    url: http://postech-users-api:8080
+    routes:
+      # Rotas publicas (login/register) — sem JWT
+      - name: auth-public
+        paths:
+          - /api/auth
+        strip_path: false
+
+      # Rotas protegidas — JWT obrigatorio
+      - name: users-protected
+        paths:
+          - /api/users
+        strip_path: false
+        plugins:
+          - name: jwt
+            config:
+              claims_to_verify:
+                - exp
+
+  # ── Catalog API ────────────────────────────────────────
+  - name: catalog-api
+    url: http://postech-catalog-api:8080
+    routes:
+      # Rotas protegidas do catalogo — JWT obrigatorio
+      - name: catalog-protected
+        paths:
+          - /api/game
+        strip_path: false
+        plugins:
+          - name: jwt
+            config:
+              claims_to_verify:
+                - exp
+
+      # Rotas protegidas de reviews — JWT obrigatorio
+      - name: reviews-protected
+        paths:
+          - /api/review
+        strip_path: false
+        plugins:
+          - name: jwt
+            config:
+              claims_to_verify:
+                - exp

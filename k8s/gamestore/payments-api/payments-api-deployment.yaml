@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payments-api
+  namespace: gamestore
+  labels:
+    app: payments-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: payments-api
+  template:
+    metadata:
+      labels:
+        app: payments-api
+    spec:
+      imagePullSecrets:
+        - name: registry-pull-secret
+      containers:
+        - name: payments-api
+          image: gitlab.fcg.local:5050/postech/postech-payments-api:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: payments-api-config
+          env:
+            - name: ConnectionStrings__DefaultConnection
+              valueFrom:
+                secretKeyRef:
+                  name: payments-api-secret
+                  key: ConnectionStrings__DefaultConnection
+            - name: RabbitMQ__Password
+              valueFrom:
+                secretKeyRef:
+                  name: payments-api-secret
+                  key: RabbitMQ__Password
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            periodSeconds: 10
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            periodSeconds: 20
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi

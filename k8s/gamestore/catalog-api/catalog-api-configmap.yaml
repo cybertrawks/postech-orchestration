@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: catalog-api-config
+  namespace: gamestore
+data:
+  ASPNETCORE_URLS: "http://+:8080"
+  ASPNETCORE_ENVIRONMENT: "Production"
+  JwtSettings__Issuer: "Postech.API"
+  JwtSettings__Audience: "Postech.Client"
+  RabbitMQ__Host: "rabbitmq.infrastructure.svc.cluster.local"
+  RabbitMQ__Port: "5672"
+  RabbitMQ__Username: "fcg"
+  RabbitMQ__VirtualHost: "/"
+  ConnectionStrings__Redis: "redis.infrastructure.svc.cluster.local:6379"
+  MongoDb__DatabaseName: "postech_catalog"

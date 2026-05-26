@@ -1,0 +1,67 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: notifications-api-config
+  namespace: gamestore
+data:
+  ASPNETCORE_ENVIRONMENT: "Production"
+  ASPNETCORE_URLS: "http://+:80"
+  RabbitMQ__Host: "rabbitmq.infrastructure.svc.cluster.local"
+  RabbitMQ__Port: "5672"
+  RabbitMQ__VirtualHost: "/"
+  Brevo__SenderEmail: "fiapcloudgamesgrupo25@gmail.com"
+  Brevo__SenderName: "FIAP Cloud Games"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notifications-api
+  namespace: gamestore
+  labels:
+    app: notifications-api
+spec:
+  # Substituido pela notifications-function (serverless) - Tech Challenge Fase 3
+  replicas: 0
+  selector:
+    matchLabels:
+      app: notifications-api
+  template:
+    metadata:
+      labels:
+        app: notifications-api
+    spec:
+      containers:
+        - name: notifications-api
+          image: ${DOCKER_USER}/notifications-api:${IMAGE_TAG}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 80
+          envFrom:
+            - configMapRef:
+                name: notifications-api-config
+            - secretRef:
+                name: notifications-api-secret
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "192Mi"
+              cpu: "200m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: notifications-api
+  namespace: gamestore
+  labels:
+    app: notifications-api
+spec:
+  type: NodePort
+  selector:
+    app: notifications-api
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+      nodePort: 30084

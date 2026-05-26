@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: azurite
+  namespace: infrastructure
+  labels:
+    app: azurite
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: azurite
+  template:
+    metadata:
+      labels:
+        app: azurite
+    spec:
+      containers:
+        - name: azurite
+          image: mcr.microsoft.com/azure-storage/azurite
+          args:
+            - azurite
+            - --blobHost
+            - 0.0.0.0
+            - --queueHost
+            - 0.0.0.0
+            - --tableHost
+            - 0.0.0.0
+            - --skipApiVersionCheck
+            - --loose
+          ports:
+            - name: blob
+              containerPort: 10000
+            - name: queue
+              containerPort: 10001
+            - name: table
+              containerPort: 10002
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: azurite
+  namespace: infrastructure
+spec:
+  clusterIP: 10.97.249.80
+  selector:
+    app: azurite
+  ports:
+    - name: blob
+      port: 10000
+      targetPort: 10000
+    - name: queue
+      port: 10001
+      targetPort: 10001
+    - name: table
+      port: 10002
+      targetPort: 10002
+  type: ClusterIP

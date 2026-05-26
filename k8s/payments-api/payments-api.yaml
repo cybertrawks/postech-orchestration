@@ -1,0 +1,64 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: payments-api-config
+  namespace: gamestore
+data:
+  ASPNETCORE_ENVIRONMENT: "Production"
+  ASPNETCORE_URLS: "http://+:8080"
+  RabbitMQ__Host: "rabbitmq.infrastructure.svc.cluster.local"
+  RabbitMQ__Port: "5672"
+  RabbitMQ__VirtualHost: "/"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payments-api
+  namespace: gamestore
+  labels:
+    app: payments-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: payments-api
+  template:
+    metadata:
+      labels:
+        app: payments-api
+    spec:
+      containers:
+        - name: payments-api
+          image: ${DOCKER_USER}/payments-api:${IMAGE_TAG}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: payments-api-config
+            - secretRef:
+                name: payments-api-secret
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "192Mi"
+              cpu: "200m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: payments-api
+  namespace: gamestore
+  labels:
+    app: payments-api
+spec:
+  type: NodePort
+  selector:
+    app: payments-api
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+      nodePort: 30083

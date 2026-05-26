@@ -1,0 +1,270 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasource
+  namespace: monitoring
+data:
+  datasource.yml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus:9090
+        isDefault: true
+        editable: false
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-provider
+  namespace: monitoring
+data:
+  dashboards.yml: |
+    apiVersion: 1
+    providers:
+      - name: "FCG Dashboards"
+        orgId: 1
+        folder: ""
+        type: file
+        disableDeletion: false
+        editable: true
+        options:
+          path: /var/lib/grafana/dashboards
+          foldersFromFilesStructure: false
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-fcg
+  namespace: monitoring
+data:
+  fcg-api-metrics.json: |
+    {
+      "annotations": { "list": [] },
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 1,
+      "id": null,
+      "links": [],
+      "panels": [
+        {
+          "title": "Request Rate (req/s)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps",
+              "custom": { "lineWidth": 2, "fillOpacity": 10 }
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "expr": "sum(rate(http_request_duration_seconds_count{job=~\"$service\"}[1m])) by (job)",
+              "legendFormat": "{{job}}",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "title": "Request Count by Status Code",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": { "lineWidth": 2, "fillOpacity": 10 }
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "expr": "sum(rate(http_request_duration_seconds_count{job=~\"$service\"}[1m])) by (code)",
+              "legendFormat": "HTTP {{code}}",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "title": "Request Latency (p50 / p95 / p99)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "custom": { "lineWidth": 2, "fillOpacity": 10 }
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket{job=~\"$service\"}[5m])) by (le, job))",
+              "legendFormat": "{{job}} p50",
+              "refId": "A"
+            },
+            {
+              "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=~\"$service\"}[5m])) by (le, job))",
+              "legendFormat": "{{job}} p95",
+              "refId": "B"
+            },
+            {
+              "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{job=~\"$service\"}[5m])) by (le, job))",
+              "legendFormat": "{{job}} p99",
+              "refId": "C"
+            }
+          ]
+        },
+        {
+          "title": "Error Rate (5xx / total)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "custom": { "lineWidth": 2, "fillOpacity": 10 },
+              "min": 0,
+              "max": 1
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "expr": "sum(rate(http_request_duration_seconds_count{job=~\"$service\", code=~\"5..\"}[5m])) by (job) / sum(rate(http_request_duration_seconds_count{job=~\"$service\"}[5m])) by (job)",
+              "legendFormat": "{{job}} error rate",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "title": "Requests per Endpoint",
+          "type": "table",
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "fieldConfig": {
+            "defaults": { "unit": "reqps" },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "expr": "sum(rate(http_request_duration_seconds_count{job=~\"$service\"}[5m])) by (method, endpoint, code)",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": { "Time": true },
+                "renameByName": {
+                  "method": "Method",
+                  "endpoint": "Endpoint",
+                  "code": "Status",
+                  "Value": "Rate (req/s)"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "refresh": "10s",
+      "schemaVersion": 39,
+      "tags": ["fcg", "api", "prometheus"],
+      "templating": {
+        "list": [
+          {
+            "current": { "selected": true, "text": "All", "value": "$__all" },
+            "definition": "label_values(http_request_duration_seconds_count, job)",
+            "hide": 0,
+            "includeAll": true,
+            "label": "Service",
+            "multi": true,
+            "name": "service",
+            "query": { "query": "label_values(http_request_duration_seconds_count, job)", "refId": "StandardVariableQuery" },
+            "refresh": 2,
+            "type": "query"
+          }
+        ]
+      },
+      "time": { "from": "now-30m", "to": "now" },
+      "title": "FCG - API Metrics",
+      "uid": "fcg-api-metrics"
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: monitoring
+  labels:
+    app: grafana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      containers:
+        - name: grafana
+          image: grafana/grafana:11.6.0
+          env:
+            - name: GF_SECURITY_ADMIN_USER
+              value: "admin"
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-secret
+                  key: admin-password
+          ports:
+            - containerPort: 3000
+          volumeMounts:
+            - name: datasource
+              mountPath: /etc/grafana/provisioning/datasources
+            - name: dashboard-provider
+              mountPath: /etc/grafana/provisioning/dashboards
+            - name: dashboards
+              mountPath: /var/lib/grafana/dashboards
+            - name: data
+              mountPath: /var/lib/grafana
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+      volumes:
+        - name: datasource
+          configMap:
+            name: grafana-datasource
+        - name: dashboard-provider
+          configMap:
+            name: grafana-dashboard-provider
+        - name: dashboards
+          configMap:
+            name: grafana-dashboard-fcg
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: monitoring
+spec:
+  selector:
+    app: grafana
+  ports:
+    - port: 3000
+      targetPort: 3000
+  type: LoadBalancer

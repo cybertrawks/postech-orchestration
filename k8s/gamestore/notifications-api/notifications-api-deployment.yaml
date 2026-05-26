@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notifications-api
+  namespace: gamestore
+  labels:
+    app: notifications-api
+spec:
+  # Substituido pela notifications-function (serverless) - Tech Challenge Fase 3
+  replicas: 0
+  selector:
+    matchLabels:
+      app: notifications-api
+  template:
+    metadata:
+      labels:
+        app: notifications-api
+    spec:
+      imagePullSecrets:
+        - name: registry-pull-secret
+      containers:
+        - name: notifications-api
+          image: gitlab.fcg.local:5050/postech/postech-notifications-api:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: notifications-api-config
+          env:
+            - name: RabbitMQ__Password
+              valueFrom:
+                secretKeyRef:
+                  name: notifications-api-secret
+                  key: RabbitMQ__Password
+            - name: Brevo__ApiKey
+              valueFrom:
+                secretKeyRef:
+                  name: notifications-api-secret
+                  key: Brevo__ApiKey
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            periodSeconds: 10
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            periodSeconds: 20
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi

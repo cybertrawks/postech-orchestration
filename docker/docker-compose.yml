@@ -1,0 +1,261 @@
+name: postech-k8s-like
+
+services:
+  postgresql:
+    image: postgres:16-alpine
+    container_name: postech-postgresql
+    environment:
+      POSTGRES_DB: postech_main
+      POSTGRES_USER: postech_admin
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgresql_data:/var/lib/postgresql/data
+      - ../docker/init-scripts:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postech_admin -d postech_main"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks:
+      gamestore-net:
+        aliases:
+          - postgresql.infrastructure.svc.cluster.local
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: postech-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+      RABBITMQ_DEFAULT_VHOST: "/"
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 15s
+      timeout: 15s
+      retries: 20
+    networks:
+      gamestore-net:
+        aliases:
+          - rabbitmq.infrastructure.svc.cluster.local
+
+  redis:
+    image: redis:7-alpine
+    container_name: postech-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks:
+      gamestore-net:
+        aliases:
+          - redis.infrastructure.svc.cluster.local
+
+  mongodb:
+    image: mongo:7-jammy
+    container_name: postech-mongodb
+    environment:
+      MONGO_INITDB_DATABASE: postech_catalog
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    networks:
+      gamestore-net:
+        aliases:
+          - mongodb.infrastructure.svc.cluster.local
+
+  users-api:
+    image: ${DOCKER_USER:-postech}/users-api:${IMAGE_TAG:-local}
+    container_name: postech-users-api
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      RabbitMQ__Host: rabbitmq.infrastructure.svc.cluster.local
+      RabbitMQ__Port: "5672"
+      RabbitMQ__VirtualHost: "/"
+      JwtSettings__Issuer: Postech.API
+      JwtSettings__Audience: Postech.Client
+      JwtSettings__ExpirationMinutes: "60"
+      Redis__Host: redis.infrastructure.svc.cluster.local
+      ConnectionStrings__DefaultConnection: Host=postgresql.infrastructure.svc.cluster.local;Port=5432;Database=postech_users;Username=postech_admin;Password=${POSTGRES_PASSWORD}
+      JwtSettings__SecretKey: ${JWT_SECRET_KEY}
+      RabbitMQ__Username: ${RABBITMQ_USER}
+      RabbitMQ__Password: ${RABBITMQ_PASSWORD}
+    ports:
+      - "8081:8080"
+    networks:
+      - gamestore-net
+
+  catalog-api:
+    image: ${DOCKER_USER:-postech}/catalog-api:${IMAGE_TAG:-local}
+    container_name: postech-catalog-api
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      RabbitMQ__Host: rabbitmq.infrastructure.svc.cluster.local
+      RabbitMQ__Port: "5672"
+      RabbitMQ__VirtualHost: "/"
+      JwtSettings__SecretKey: ${JWT_SECRET_KEY}
+      JwtSettings__Issuer: Postech.API
+      JwtSettings__Audience: Postech.Client
+      JwtSettings__ExpirationMinutes: "60"
+      ConnectionStrings__DefaultConnection: Host=postgresql.infrastructure.svc.cluster.local;Port=5432;Database=postech_catalog;Username=postech_admin;Password=${POSTGRES_PASSWORD}
+      ConnectionStrings__MongoDb: mongodb://mongodb.infrastructure.svc.cluster.local:27017
+      ConnectionStrings__Redis: redis.infrastructure.svc.cluster.local:6379
+      MongoDb__DatabaseName: postech_catalog
+      RabbitMQ__Username: ${RABBITMQ_USER}
+      RabbitMQ__Password: ${RABBITMQ_PASSWORD}
+    ports:
+      - "8082:8080"
+    networks:
+      - gamestore-net
+
+  payments-api:
+    image: ${DOCKER_USER:-postech}/payments-api:${IMAGE_TAG:-local}
+    container_name: postech-payments-api
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      RabbitMQ__Host: rabbitmq.infrastructure.svc.cluster.local
+      RabbitMQ__Port: "5672"
+      RabbitMQ__VirtualHost: "/"
+      ConnectionStrings__DefaultConnection: Host=postgresql.infrastructure.svc.cluster.local;Port=5432;Database=postech_payments;Username=postech_admin;Password=${POSTGRES_PASSWORD}
+      RabbitMQ__Username: ${RABBITMQ_USER}
+      RabbitMQ__Password: ${RABBITMQ_PASSWORD}
+    ports:
+      - "8083:8080"
+    networks:
+      - gamestore-net
+
+  notifications-api:
+    image: ${DOCKER_USER:-postech}/notifications-api:${IMAGE_TAG:-local}
+    container_name: postech-notifications-api
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:80
+      RabbitMQ__Host: rabbitmq.infrastructure.svc.cluster.local
+      RabbitMQ__Port: "5672"
+      RabbitMQ__VirtualHost: "/"
+      Brevo__SenderEmail: fiapcloudgamesgrupo25@gmail.com
+      Brevo__SenderName: FIAP Cloud Games
+      RabbitMQ__Username: ${RABBITMQ_USER}
+      RabbitMQ__Password: ${RABBITMQ_PASSWORD}
+      Brevo__ApiKey: ${BREVO_API_KEY}
+    ports:
+      - "8084:80"
+    networks:
+      - gamestore-net
+
+  kong:
+    image: kong:3.9
+    container_name: postech-kong
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /kong/kong.yml
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_ADMIN_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_LISTEN: "0.0.0.0:8001"
+    volumes:
+      - ./kong/kong.yml:/kong/kong.yml:ro
+    ports:
+      - "8000:8000"
+      - "8001:8001"
+    depends_on:
+      - users-api
+      - catalog-api
+    networks:
+      gamestore-net:
+        aliases:
+          - kong.infrastructure.svc.cluster.local
+
+  prometheus:
+    image: prom/prometheus:v3.4.0
+    container_name: postech-prometheus
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=15d"
+    ports:
+      - "9090:9090"
+    depends_on:
+      - users-api
+      - catalog-api
+    networks:
+      gamestore-net:
+        aliases:
+          - prometheus.infrastructure.svc.cluster.local
+
+  grafana:
+    image: grafana/grafana:11.6.0
+    container_name: postech-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    networks:
+      - gamestore-net
+
+volumes:
+  postgresql_data:
+  rabbitmq_data:
+  redis_data:
+  mongodb_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  gamestore-net:
+    driver: bridge

@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notifications-function
+  namespace: gamestore
+  labels:
+    app: notifications-function
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      app: notifications-function
+  template:
+    metadata:
+      labels:
+        app: notifications-function
+    spec:
+      imagePullSecrets:
+        - name: registry-pull-secret
+      containers:
+        - name: notifications-function
+          image: gitlab.fcg.local:5050/postech/postech-notifications-function:latest
+          imagePullPolicy: Always
+          env:
+            - name: AzureWebJobsStorage
+              value: "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://10.97.249.80:10000/devstoreaccount1;QueueEndpoint=http://10.97.249.80:10001/devstoreaccount1;TableEndpoint=http://10.97.249.80:10002/devstoreaccount1"
+            - name: FUNCTIONS_WORKER_RUNTIME
+              value: "dotnet-isolated"
+            - name: WEBSITE_PLACEHOLDER_MODE
+              value: "0"
+            - name: RabbitMQConnection
+              valueFrom:
+                secretKeyRef:
+                  name: notifications-function-secret
+                  key: rabbitmq-connection
+            - name: Brevo__ApiKey
+              valueFrom:
+                secretKeyRef:
+                  name: notifications-function-secret
+                  key: brevo-api-key
+            - name: Brevo__SenderEmail
+              value: "socialphsilva@gmail.com"
+            - name: Brevo__SenderName
+              value: "FIAP Cloud Games"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
